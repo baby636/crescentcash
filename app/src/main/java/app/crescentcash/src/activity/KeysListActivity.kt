@@ -23,6 +23,7 @@ import app.crescentcash.src.utils.Constants
 import app.crescentcash.src.utils.PrefsUtil
 import com.github.kiulian.converter.AddressConverter
 import org.bitcoinj.core.CashAddress
+import org.bitcoinj.core.CashAddressFactory
 import org.bitcoinj.core.ECKey
 import org.bitcoinj.crypto.BIP38PrivateKey
 import java.util.*
@@ -105,7 +106,7 @@ class KeysListActivity : AppCompatActivity() {
         }
         this.keysList.setOnItemLongClickListener { parent, view, position, id ->
             val key = WalletManager.issuedKeysArrayList[position]["key"] ?: error("")
-            val cashAddress = CashAddress.fromBase58(WalletManager.parameters, key.toAddress(WalletManager.parameters).toString())
+            val cashAddress = CashAddressFactory.create().getFromBase58(WalletManager.parameters, key.toAddress(WalletManager.parameters).toString())
             val clip = ClipData.newPlainText("Address", cashAddress.toString())
             val clipboard = this.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             clipboard.setPrimaryClip(clip)
@@ -142,7 +143,7 @@ class KeysListActivity : AppCompatActivity() {
                     if (ecKey != null) {
                         val legacyAddr = ecKey.toAddress(WalletManager.parameters).toString()
                         val params = WalletManager.parameters
-                        val cashAddrObj = CashAddress.fromBase58(WalletManager.parameters, legacyAddr)
+                        val cashAddrObj = CashAddressFactory.create().getFromBase58(WalletManager.parameters, legacyAddr)
                         val cashAddr = cashAddrObj.toString().replace(params.cashAddrPrefix + ":", "")
                         val cashAcctInternal = PrefsUtil.prefs.getString("cashacct_$legacyAddr", "")
                         val cashAcctTx = PrefsUtil.prefs.getString("cashacct_tx_$legacyAddr", "")

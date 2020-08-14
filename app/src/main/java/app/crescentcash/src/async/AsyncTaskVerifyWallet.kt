@@ -9,6 +9,7 @@ import app.crescentcash.src.manager.WalletManager
 import app.crescentcash.src.utils.PrefsUtil
 import org.bitcoinj.core.Address
 import org.bitcoinj.core.CashAddress
+import org.bitcoinj.core.CashAddressFactory
 import org.bitcoinj.core.LegacyAddress
 import org.bitcoinj.core.bip47.BIP47PaymentCode
 import org.bitcoinj.wallet.DeterministicSeed
@@ -55,7 +56,7 @@ class AsyncTaskVerifyWallet(val activity: MainActivity, val cashAcctName: String
                 }
             } else {
                 val accountAddress: Address? = when {
-                    Address.isValidCashAddr(WalletManager.parameters, result) -> CashAddress.fromCashAddress(WalletManager.parameters, result)
+                    Address.isValidCashAddr(WalletManager.parameters, result) -> CashAddressFactory.create().getFromFormattedAddress(WalletManager.parameters, result)
                     Address.isValidLegacyAddress(WalletManager.parameters, result) -> LegacyAddress.fromBase58(WalletManager.parameters, result)
                     else -> {
                         activity.runOnUiThread { UIManager.showToastMessage(activity, "No address found!") }
