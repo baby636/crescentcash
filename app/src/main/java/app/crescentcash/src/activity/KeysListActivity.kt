@@ -21,7 +21,6 @@ import app.crescentcash.src.manager.WalletManager
 import app.crescentcash.src.ui.NonScrollListView
 import app.crescentcash.src.utils.Constants
 import app.crescentcash.src.utils.PrefsUtil
-import com.github.kiulian.converter.AddressConverter
 import org.bitcoinj.core.CashAddress
 import org.bitcoinj.core.CashAddressFactory
 import org.bitcoinj.core.ECKey

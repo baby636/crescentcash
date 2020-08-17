@@ -10,7 +10,7 @@ class PrefsUtil {
         lateinit var prefs: SharedPreferences
 
         fun loadPrefs() {
-            UIManager.nightModeEnabled = prefs.getBoolean("nightMode", true)
+            UIManager.nightModeEnabled = prefs.getBoolean("nightMode", false)
             UIManager.streetModeEnabled = prefs.getBoolean("streetMode", false)
             UIManager.showFiat = prefs.getBoolean("showFiat", true)
             UIManager.fiat = prefs.getString("fiat", "USD") as String
