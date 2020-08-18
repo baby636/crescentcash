@@ -28,6 +28,7 @@ import com.google.common.util.concurrent.MoreExecutors
 import com.ncorti.slidetoact.SlideToActView
 import com.vdurmont.emoji.EmojiParser
 import org.bitcoinj.core.*
+import org.bitcoinj.core.bip47.BIP47Channel
 import org.bitcoinj.core.slp.*
 import org.bitcoinj.protocols.payments.PaymentProtocol
 import org.bitcoinj.protocols.payments.PaymentProtocolException
@@ -171,42 +172,23 @@ class SendSLPActivity : AppCompatActivity() {
                         if(slpRecipientAddress.text.toString().startsWith("http")) {
                             this@SendSLPActivity.processSlpBIP70(slpRecipientAddress.text.toString())
                         } else {
-                            try {
-                                val tokenId = WalletManager.currentTokenId
-                                val amt = java.lang.Double.parseDouble(slpAmount.text.toString())
-                                val tx = WalletManager.getSlpKit().createSlpTransaction(slpRecipientAddress.text.toString(), tokenId, amt, null)
-                                WalletManager.getSlpKit().broadcastSlpTransaction(tx)
-                                val txHexBytes = Hex.encode(tx.bitcoinSerialize())
-                                val txHex = String(txHexBytes, StandardCharsets.UTF_8)
-                                WalletManager.getSlpKit().broadcastSlpTransaction(tx)
-
-                                if (!WalletManager.useTor) {
-                                    NetManager.broadcastTransaction(null, txHex, "https://rest.bitcoin.com/v2/rawtransactions/sendRawTransaction")
-                                }
-
-                                NetManager.broadcastTransaction(null, txHex, "https://rest.imaginary.cash/v2/rawtransactions/sendRawTransaction")
-                                object : Thread() {
-                                    override fun run() {
-                                        WalletManager.getSlpKit().recalculateSlpUtxos()
+                            val address = slpRecipientAddress.text.toString()
+                            if (Address.isValidPaymentCode(address)) {
+                                val canSend = WalletManager.slpWalletKit?.canSendToPaymentCode(address)
+                                if(canSend != null) {
+                                    if(canSend) {
+                                        this@SendSLPActivity.attemptBip47Payment(this@SendSLPActivity, amount, address)
+                                    } else {
+                                        val notification = WalletManager.slpWalletKit?.makeNotificationTransaction(address, true)
+                                        WalletManager.slpWalletKit?.broadcastTransaction(notification?.tx)
+                                        WalletManager.slpWalletKit?.putPaymenCodeStatusSent(address, notification?.tx)
+                                        this@SendSLPActivity.attemptBip47Payment(this@SendSLPActivity, amount, address)
                                     }
-                                }.start()
-                                UIManager.showToastMessage(this@SendSLPActivity, "Sent!")
-                                this@SendSLPActivity.finish()
-                            } catch (e: InsufficientMoneyException) {
-                                this@SendSLPActivity.runOnUiThread { e.message?.let { this@SendSLPActivity.throwSendError(it) } }
-                            } catch (e: Wallet.CouldNotAdjustDownwards) {
-                                this@SendSLPActivity.throwSendError("Not enough BCH for fee!")
-                            } catch (e: Wallet.ExceededMaxTransactionSize) {
-                                this@SendSLPActivity.throwSendError("Transaction is too large!")
-                            } catch (e: NullPointerException) {
-                                this@SendSLPActivity.throwSendError("Cash Account not found.")
-                            } catch (e: IllegalArgumentException) {
-                                this@SendSLPActivity.runOnUiThread { e.message?.let { this@SendSLPActivity.throwSendError(it) } }
-                            } catch (e: AddressFormatException) {
-                                this@SendSLPActivity.throwSendError("Invalid address!")
-                            } catch (e: Exception) {
-                                this@SendSLPActivity.runOnUiThread { e.message?.let { this@SendSLPActivity.throwSendError(it) } }
+                                }
+                            } else if (Address.isValidSlpAddress(WalletManager.parameters, address)) {
+                                this@SendSLPActivity.finalizeSlpTransaction(slpRecipientAddress.text.toString())
                             }
+
                         }
                     } else {
                         this@SendSLPActivity.runOnUiThread { UIManager.showToastMessage(this@SendSLPActivity, "SLP CashAccts are not supported yet.") }
@@ -250,6 +232,70 @@ class SendSLPActivity : AppCompatActivity() {
         val filter = IntentFilter()
         filter.addAction(Constants.ACTION_CLEAR_SLP_SEND)
         LocalBroadcastManager.getInstance(this).registerReceiver(receiver, filter)
+    }
+
+    private fun attemptBip47Payment(sendActivity: SendSLPActivity, amount: String, paymentCode: String) {
+        val paymentChannel: BIP47Channel? = WalletManager.slpWalletKit?.getBip47MetaForPaymentCode(paymentCode)
+        var depositAddress: String? = null
+        if (paymentChannel != null) {
+            if(paymentChannel.isNotificationTransactionSent) {
+                depositAddress = WalletManager.slpWalletKit?.getCurrentOutgoingAddress(paymentChannel)
+                if(depositAddress != null) {
+                    println("Received user's deposit address $depositAddress")
+                    paymentChannel.incrementOutgoingIndex()
+                    WalletManager.slpWalletKit?.saveBip47MetaData()
+                    this.finalizeSlpTransaction(depositAddress)
+                }
+            } else {
+                val notification = WalletManager.slpWalletKit?.makeNotificationTransaction(paymentCode, true)
+                WalletManager.slpWalletKit?.broadcastTransaction(notification?.tx)
+                WalletManager.slpWalletKit?.putPaymenCodeStatusSent(paymentCode, notification?.tx)
+                this.attemptBip47Payment(sendActivity, amount, paymentCode)
+            }
+        }
+    }
+
+    private fun finalizeSlpTransaction(address: String) {
+        if(Address.isValidSlpAddress(WalletManager.parameters, address)) {
+            try {
+                val tokenId = WalletManager.currentTokenId
+                val amt = java.lang.Double.parseDouble(slpAmount.text.toString())
+                val tx = WalletManager.getSlpKit().createSlpTransaction(address, tokenId, amt, null)
+                WalletManager.getSlpKit().broadcastSlpTransaction(tx)
+                val txHexBytes = Hex.encode(tx.bitcoinSerialize())
+                val txHex = String(txHexBytes, StandardCharsets.UTF_8)
+                WalletManager.getSlpKit().broadcastSlpTransaction(tx)
+
+                if (!WalletManager.useTor) {
+                    NetManager.broadcastTransaction(null, txHex, "https://rest.bitcoin.com/v2/rawtransactions/sendRawTransaction")
+                }
+
+                NetManager.broadcastTransaction(null, txHex, "https://rest.imaginary.cash/v2/rawtransactions/sendRawTransaction")
+                object : Thread() {
+                    override fun run() {
+                        WalletManager.getSlpKit().recalculateSlpUtxos()
+                    }
+                }.start()
+                UIManager.showToastMessage(this@SendSLPActivity, "Sent!")
+                this@SendSLPActivity.finish()
+            } catch (e: InsufficientMoneyException) {
+                this@SendSLPActivity.runOnUiThread { e.message?.let { this@SendSLPActivity.throwSendError(it) } }
+            } catch (e: Wallet.CouldNotAdjustDownwards) {
+                this@SendSLPActivity.throwSendError("Not enough BCH for fee!")
+            } catch (e: Wallet.ExceededMaxTransactionSize) {
+                this@SendSLPActivity.throwSendError("Transaction is too large!")
+            } catch (e: NullPointerException) {
+                this@SendSLPActivity.throwSendError("Cash Account not found.")
+            } catch (e: IllegalArgumentException) {
+                this@SendSLPActivity.runOnUiThread { e.message?.let { this@SendSLPActivity.throwSendError(it) } }
+            } catch (e: AddressFormatException) {
+                this@SendSLPActivity.throwSendError("Invalid address!")
+            } catch (e: Exception) {
+                this@SendSLPActivity.runOnUiThread { e.message?.let { this@SendSLPActivity.throwSendError(it) } }
+            }
+        } else {
+            this@SendSLPActivity.throwSendError("Invalid SLP address!")
+        }
     }
 
     private fun send() {
@@ -385,7 +431,7 @@ class SendSLPActivity : AppCompatActivity() {
     }
 
     private fun sendCoins(amount: String, toAddress: String) {
-        if (toAddress.contains("#") || Address.isValidCashAddr(WalletManager.parameters, toAddress) || Address.isValidLegacyAddress(WalletManager.parameters, toAddress) && (!LegacyAddress.fromBase58(WalletManager.parameters, toAddress).p2sh || WalletManager.allowLegacyP2SH)) {
+        if (toAddress.contains("#") || Address.isValidCashAddr(WalletManager.parameters, toAddress) || Address.isValidLegacyAddress(WalletManager.parameters, toAddress) && (!AddressFactory.create().fromBase58(WalletManager.parameters, toAddress).p2sh || WalletManager.allowLegacyP2SH)) {
             object : Thread() {
                 override fun run() {
                     val coinAmt = Coin.parseCoin(amount)

@@ -33,6 +33,7 @@ import org.bitcoinj.crypto.BIP38PrivateKey
 import org.bitcoinj.crypto.KeyCrypterScrypt
 import org.bitcoinj.kits.BIP47AppKit
 import org.bitcoinj.kits.SlpAppKit
+import org.bitcoinj.kits.SlpBIP47AppKit
 import org.bitcoinj.net.NetHelper
 import org.bitcoinj.params.MainNetParams
 import org.bitcoinj.params.TestNet3Params
@@ -69,7 +70,7 @@ class WalletManager {
         lateinit var currentTokenId: String
         var currentTokenPosition: Int = 0
         var walletKit: BIP47AppKit? = null
-        var slpWalletKit: SlpAppKit? = null
+        var slpWalletKit: SlpBIP47AppKit? = null
         var parameters: NetworkParameters = if (Constants.IS_PRODUCTION) MainNetParams.get() else TestNet3Params.get()
         var addOpReturn: Boolean = false
         var encrypted: Boolean = false
@@ -104,7 +105,7 @@ class WalletManager {
         }
 
         fun isAddressMine(address: String): Boolean {
-            val addressObj = LegacyAddress.fromBase58(parameters, address)
+            val addressObj = AddressFactory.create().fromBase58(parameters, address)
 
             return wallet.isPubKeyHashMine(addressObj.hash)
         }
@@ -165,7 +166,7 @@ class WalletManager {
                 println(finalAddress)
                 val signedAddress = ECKey.signedMessageToKey(message, signature).toAddress(MainNetParams.get()).toString()
                 val addressLegacy = if (Address.isValidCashAddr(MainNetParams.get(), finalAddress)) {
-                    LegacyAddress.fromCashAddress(parameters, finalAddress).toBase58()
+                    AddressFactory.create().fromCashAddress(parameters, finalAddress).toBase58()
                 } else {
                     finalAddress
                 }
@@ -442,7 +443,7 @@ class WalletManager {
             val mainHandler = Handler(activity.mainLooper)
 
             val runnable = Runnable {
-                this.slpWalletKit = SlpAppKit().initialize(this.parameters, this.walletDir, "users_slp_wallet", seed)
+                this.slpWalletKit = SlpBIP47AppKit().initialize(this.parameters, this.walletDir, "users_slp_wallet", seed)
                 slpWalletKit?.setUseTor(useTor)
                 this.slpWalletKit!!.setDownloadProgressTracker(object : DownloadProgressTracker() {
                     override fun progress(pct: Double, blocksSoFar: Int, date: Date) {
@@ -508,7 +509,7 @@ class WalletManager {
             }
         }
 
-        fun getSlpKit(): SlpAppKit {
+        fun getSlpKit(): SlpBIP47AppKit {
             return slpWalletKit!!
         }
 
@@ -761,7 +762,7 @@ class WalletManager {
                                             this@Companion.attemptBip47Payment(sendActivity, amount, address)
                                         }
                                     }
-                                } else if (Address.isValidCashAddr(parameters, address) || Address.isValidLegacyAddress(parameters, address) && (!LegacyAddress.fromBase58(parameters, address).p2sh || allowLegacyP2SH)) {
+                                } else if (Address.isValidCashAddr(parameters, address) || Address.isValidLegacyAddress(parameters, address) && (!AddressFactory.create().fromBase58(parameters, address).p2sh || allowLegacyP2SH)) {
                                     this@Companion.finalizeTransaction(sendActivity, amount, address)
                                 }
                             } else {
@@ -780,7 +781,7 @@ class WalletManager {
                                         this@Companion.attemptBip47Payment(sendActivity, amount, toAddress)
                                     }
                                 }
-                            } else if(Address.isValidCashAddr(parameters, toAddress) || Address.isValidLegacyAddress(parameters, toAddress) && (!LegacyAddress.fromBase58(parameters, toAddress).p2sh || allowLegacyP2SH)) {
+                            } else if(Address.isValidCashAddr(parameters, toAddress) || Address.isValidLegacyAddress(parameters, toAddress) && (!AddressFactory.create().fromBase58(parameters, toAddress).p2sh || allowLegacyP2SH)) {
                                 this@Companion.finalizeTransaction(sendActivity, amount, toAddress)
                             }
                         }
