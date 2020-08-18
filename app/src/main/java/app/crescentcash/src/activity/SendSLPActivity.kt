@@ -385,7 +385,7 @@ class SendSLPActivity : AppCompatActivity() {
     }
 
     private fun sendCoins(amount: String, toAddress: String) {
-        if (toAddress.contains("#") || Address.isValidCashAddr(WalletManager.parameters, toAddress) || Address.isValidLegacyAddress(WalletManager.parameters, toAddress) && (!LegacyAddress.fromBase58(WalletManager.parameters, toAddress).p2sh || WalletManager.allowLegacyP2SH)) {
+        if (toAddress.contains("#") || Address.isValidCashAddr(WalletManager.parameters, toAddress) || Address.isValidLegacyAddress(WalletManager.parameters, toAddress) && (!AddressFactory.create().fromBase58(WalletManager.parameters, toAddress).p2sh || WalletManager.allowLegacyP2SH)) {
             object : Thread() {
                 override fun run() {
                     val coinAmt = Coin.parseCoin(amount)
