@@ -24,7 +24,12 @@ import com.journeyapps.barcodescanner.BarcodeEncoder
 
 class ReceiveSLPActivity : AppCompatActivity() {
     private lateinit var slpAddress: TextView
-    private var currentAddrView = true
+    private enum class AddressView {
+        SLP,
+        BCH,
+        BIP47
+    }
+    private var currentAddrView: AddressView = AddressView.SLP
     private lateinit var toggleAddr: ImageButton
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -49,13 +54,22 @@ class ReceiveSLPActivity : AppCompatActivity() {
         val copyListener = View.OnClickListener { copyAddr() }
         this.findViewById<ImageView>(R.id.slpQR).setOnClickListener(copyListener)
         this.toggleAddr.setOnClickListener {
-            this.currentAddrView = !this.currentAddrView
+            when(this.currentAddrView) {
+                AddressView.SLP -> this.currentAddrView = AddressView.BIP47
+                AddressView.BIP47 -> this.currentAddrView = AddressView.BCH
+                AddressView.BCH -> this.currentAddrView = AddressView.SLP
+            }
             this.displayReceiveSLP()
         }
     }
 
     private fun copyAddr() {
-        val clip: ClipData = if (currentAddrView) ClipData.newPlainText("My SLP address", "simpleledger:" + slpAddress.text.toString()) else ClipData.newPlainText("My BCH SLP address", "bitcoincash:" + slpAddress.text.toString())
+        //else ClipData.newPlainText("My BCH SLP address", "bitcoincash:" + slpAddress.text.toString())
+        val clip: ClipData = when(this.currentAddrView) {
+            AddressView.SLP -> ClipData.newPlainText("My SLP address", "simpleledger:" + slpAddress.text.toString())
+            AddressView.BIP47 -> ClipData.newPlainText("My BIP47 payment code", slpAddress.text.toString())
+            AddressView.BCH -> ClipData.newPlainText("My BCH SLP address", "bitcoincash:" + slpAddress.text.toString())
+        }
         val clipboard = this.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
         clipboard.setPrimaryClip(clip)
         Toast.makeText(this, "Copied", Toast.LENGTH_SHORT).show()
@@ -121,14 +135,15 @@ class ReceiveSLPActivity : AppCompatActivity() {
 
     private fun displayReceiveSLP() {
         if (WalletManager.walletKit != null) {
-            val address = if (currentAddrView)
-                WalletManager.getSlpKit().currentSlpReceiveAddress().toString()
-            else
-                WalletManager.getSlpKit().currentSlpReceiveAddress().toCashAddress()
+            val address = when(this.currentAddrView) {
+                AddressView.SLP -> WalletManager.getSlpKit().currentSlpReceiveAddress().toString()
+                AddressView.BIP47 -> WalletManager.getSlpKit().paymentCode
+                AddressView.BCH -> WalletManager.getSlpKit().currentSlpReceiveAddress().toCashAddress()
+            }
 
             slpAddress.text = address.replace("simpleledger:", "").replace(WalletManager.parameters.cashAddrPrefix + ":", "")
 
-            if (currentAddrView)
+            if (currentAddrView == AddressView.SLP)
                 generateQR(address, R.id.slpQR, true)
             else
                 generateQR(address, R.id.slpQR, false)
